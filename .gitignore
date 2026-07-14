@@ -1,0 +1,23 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+venv/
+
+chroma_db/
+
+.ipynb_checkpoints/
+
+.vscode/
+
+.DS_Store
+
+data/reports
+
+# Generated files
+RAG_pipeline/data/chunks_embedded.json
+RAG_pipeline/data/chunks.json
+
+# Generated files
+data/chunks.json
+data/chunks_embedded.json

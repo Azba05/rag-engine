@@ -1,0 +1,9 @@
+langchain
+sentence-transformers
+pymupdf
+chromadb
+streamlit
+requests
+python-dotenv
+langchain-community
+langchain-core
