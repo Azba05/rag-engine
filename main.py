@@ -1,54 +1,40 @@
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from retrieval import detect_company, vectorstore
 
-from retrieval import ask_grok
-
-app = FastAPI(
-    title="Financial RAG",
-    version="2.0"
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+app = FastAPI(title="RAG Financial Engine", version="1.0")
 
 @app.get("/")
 def home():
-    return {"message":"Financial RAG API"}
-
+    return {"message": "RAG Financial Engine API"}
 
 @app.post("/ask")
-def ask(question:str):
-
-    result=ask_grok(question)
-
-    return{
-
-        "question":question,
-
-        "answer":result["answer"],
-
-        "sources":list(
-            {
-                d.metadata["company"]
-                for d in result["sources"]
-            }
-        )
-
+def ask_question(question: str):
+    company = detect_company(question)
+    
+    if company is None:
+        return {
+            "company_found": False,
+            "answer": "Requested company not found in the knowledge base.",
+            "sources": []
+        }
+    
+    docs = vectorstore.similarity_search(question, k=5)
+    
+    if len(docs) == 0:
+        return {
+            "company_found": True,
+            "answer": "No relevant documents found.",
+            "sources": []
+        }
+    
+    context = "\n".join([d.page_content for d in docs])
+    
+    return {
+        "company_found": True,
+        "answer": context[:300],
+        "sources": [d.metadata['company'] for d in docs]
     }
 
-
-if __name__=="__main__":
-
+if __name__ == "__main__":
     import uvicorn
-
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=8000
-    )
+    uvicorn.run(app, host="0.0.0.0", port=8000)
