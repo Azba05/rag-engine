@@ -1,69 +1,103 @@
 import os
-import pymupdf  
 import json
-from pathlib import Path
+import fitz
 
-def extract_text_from_pdf(pdf_path):
-    """Extract text from PDF using PyMuPDF"""
-    doc = pymupdf.open(pdf_path)
-    text = ""
-    for page_num in range(len(doc)):
-        page = doc[page_num]
-        text += page.get_text()
-    doc.close()
-    return text
+INPUT_FOLDER = "data/reports"
+OUTPUT_FILE = "data/chunks.json"
 
-def chunk_text(text, chunk_size=512, overlap=100):
-    """Split text into chunks"""
+
+def chunk_text(text, chunk_size=250, overlap=50):
     words = text.split()
+
     chunks = []
-    
-    for i in range(0, len(words), chunk_size - overlap):
+
+    step = chunk_size - overlap
+
+    for i in range(0, len(words), step):
+
         chunk = " ".join(words[i:i + chunk_size])
+
         if chunk.strip():
             chunks.append(chunk)
-    
+
     return chunks
 
-def process_all_pdfs():
-    """Process all PDFs in data/reports/"""
-    reports_dir = "data/reports"
-    
-    if not os.path.exists(reports_dir):
-        print(f"Error: {reports_dir} folder not found!")
-        return
-    
-    all_chunks = []
-    
-    for pdf_file in os.listdir(reports_dir):
-        if pdf_file.endswith('.pdf'):
-            pdf_path = os.path.join(reports_dir, pdf_file)
-            company_name = pdf_file.replace('.pdf', '').replace('_fy2025', '').replace('_fy2026', '')
-            
-            print(f"Processing: {pdf_file}...")
-            
-            text = extract_text_from_pdf(pdf_path)
-            
-            chunks = chunk_text(text)
-            
-            for i, chunk in enumerate(chunks):
-                chunk_data = {
-                    "company": company_name,
-                    "pdf_file": pdf_file,
-                    "chunk_id": i,
-                    "text": chunk,
-                    "tokens": len(chunk.split())
-                }
-                all_chunks.append(chunk_data)
-            
-            print(f"  → Created {len(chunks)} chunks from {company_name}")
-    
-    output_file = "data/chunks.json"
-    with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(all_chunks, f, indent=2, ensure_ascii=False)
-    
-    print(f"\n Total chunks created: {len(all_chunks)}")
-    print(f" Chunks saved to: {output_file}")
 
-if __name__ == "__main__":
-    process_all_pdfs()
+documents = []
+
+for pdf in os.listdir(INPUT_FOLDER):
+
+    if not pdf.endswith(".pdf"):
+        continue
+
+    company = os.path.splitext(pdf)[0]
+
+    pdf_path = os.path.join(INPUT_FOLDER, pdf)
+
+    print(f"Processing {pdf}")
+
+    doc = fitz.open(pdf_path)
+
+    chunk_id = 0
+
+    for page_number, page in enumerate(doc):
+
+        text = page.get_text("text")
+
+        if not text:
+            continue
+
+        text = " ".join(text.split())
+
+        # Skip pages with almost no text
+        if len(text.split()) < 100:
+            continue
+
+        # Skip obvious divider pages
+        divider_keywords = [
+            "Portfolio Overview",
+            "Corporate Overview",
+            "Strategic Review",
+            "Statutory Reports",
+            "Financial Statements",
+            "Integrated Annual Report"
+        ]
+
+        # If the page is very short and mostly contains section titles
+        if (
+            len(text.split()) < 180
+            and sum(k in text for k in divider_keywords) >= 2
+        ):
+            continue
+
+        page_chunks = chunk_text(text)
+
+        for chunk in page_chunks:
+
+            chunk = chunk.strip()
+
+            # Skip tiny chunks
+            if len(chunk.split()) < 80:
+                continue
+
+            documents.append(
+                {
+                    "company": company,
+                    "pdf_file": pdf,
+                    "page": page_number + 1,
+                    "chunk_id": chunk_id,
+                    "tokens": len(chunk.split()),
+                    "text": chunk,
+                }
+            )
+
+            chunk_id += 1
+
+print(f"\nTotal chunks created: {len(documents)}")
+
+os.makedirs("data", exist_ok=True)
+
+with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+    json.dump(documents, f, indent=2, ensure_ascii=False)
+
+print(f"Saved to {OUTPUT_FILE}")
