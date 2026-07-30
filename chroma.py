@@ -7,14 +7,6 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.documents import Document
 
 # --------------------------------------------------
-# Delete old Chroma database
-# --------------------------------------------------
-
-if os.path.exists("./chroma_db"):
-    shutil.rmtree("./chroma_db")
-    print("Old Chroma database deleted.")
-
-# --------------------------------------------------
 # Load chunks
 # --------------------------------------------------
 
@@ -96,7 +88,7 @@ statement of profit and loss
 
 results = vectorstore.similarity_search(
     query,
-    k=5
+    k=20
 )
 
 for i, doc in enumerate(results, 1):
