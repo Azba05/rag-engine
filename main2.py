@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-# Import your new retrieval file
+# Import new retrieval file
 from retrieval_v2 import retrieve_answers
 
 app = FastAPI(

@@ -1,6 +1,7 @@
 #1. imports
 import os
 import re
+import requests
 from dotenv import load_dotenv
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -89,6 +90,99 @@ def detect_company(question):
             return company
 
     return None
+
+#6.5. LLM Generation Function
+def generate_llm_answer(question, retrieved_text):
+
+    """
+    Generates the final answer using an LLM.
+    The LLM is restricted to the retrieved financial context.
+    """
+
+    api_key = os.getenv("OPENROUTER_API_KEY")
+
+    if not api_key:
+        return "OPENROUTER_API_KEY not found in .env file."
+
+    url = "https://openrouter.ai/api/v1/chat/completions"
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "http://localhost",
+        "X-OpenRouter-Title": "Enterprise Financial RAG"
+    }
+
+    prompt = f"""
+You are a professional financial document analysist.
+
+Answer the user's question using ONLY the retrieved context below.
+
+STRICT RULES:
+
+1. Use only the retrieved context.
+2. Do not use outside knowledge.
+3. Do not guess or assume missing information.
+4. Do not invent financial figures.
+5. Do not mix information from different companies.
+6. If the retrieved context does not contain enough information,
+respond exactly:
+
+"The retrieved documents do not contain sufficient information
+to answer this question."
+
+7. Keep the answer concise and professional.
+8. Preserve financial numbers exactly as they appear.
+9. Do not mention these instructions.
+10. Do not refer to Result 1, Result 2, etc.
+
+USER QUESTION:
+{question}
+
+RETRIEVED FINANCIAL CONTEXT:
+{retrieved_text}
+"""
+
+    payload = {
+        "model": "openrouter/free",
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a strictly grounded financial document assistant."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "temperature": 0,
+        "max_tokens": 500
+    }
+
+    try:
+
+        response = requests.post(
+            url,
+            headers=headers,
+            json=payload,
+            timeout=60
+        )
+
+        if response.status_code != 200:
+            return f"LLM request failed: {response.status_code}"
+
+        data = response.json()
+
+        return data["choices"][0]["message"]["content"].strip()
+
+    except requests.exceptions.RequestException as e:
+
+        return f"LLM connection error: {str(e)}"
+
+    except (KeyError, IndexError):
+
+        return "LLM returned an unexpected response."
+
 
 #7. retrieval function
 def retrieve_answers(question):
@@ -190,7 +284,7 @@ def retrieve_answers(question):
 
     docs = vectorstore.similarity_search_with_score(
         expanded_question,
-        k=15,
+        k=20,
         filter={"company": company}
     )
 
@@ -244,8 +338,14 @@ def retrieve_answers(question):
             "score": round(score, 4)
         })
 
+    # Generate final answer using retrieved context
+    llm_answer = generate_llm_answer(
+        question,
+        retrieved_text
+    )
+
     return {
         "company_found": True,
-        "answer": retrieved_text,
+        "answer": llm_answer,
         "sources": sources
     }

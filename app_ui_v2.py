@@ -31,7 +31,6 @@ with col1:
         [
             "Infosys",
             "Reliance",
-            "TCS",
             "Titan",
             "ITC",
             "Tata Steel",
@@ -46,6 +45,7 @@ with col1:
             "Torrent Pharma",
             "Tech Mahindra",
             "JSW Steel",
+            "TCS",
             "TVS Motor",
             "Colgate",
             "Tata Power",
@@ -137,11 +137,7 @@ if execute_button:
                                 st.write(
                                     f"**PDF Page:** {source.get('page', 'N/A')}"
                                 )
-
-                                st.write(
-                                    f"**Printed Page:** {source.get('printed_page', source.get('page', 'N/A'))}"
-                                )
-
+                            
                                 st.write(
                                     f"**Similarity Score:** {source.get('score', 'N/A')}"
                                 )
