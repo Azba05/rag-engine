@@ -27,7 +27,6 @@ def ask_question(request: QuestionRequest):
     result = retrieve_answers(request.question)
 
     return {
-        "company_found": result["company_found"],
         "answer": result["answer"],
         "sources": result["sources"]
     }

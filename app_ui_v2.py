@@ -12,7 +12,7 @@ st.set_page_config(
 
 st.title("📈 Enterprise Financial Analyst Dashboard")
 st.caption(
-    "AI-powered financial document retrieval and analysis using Retrieval-Augmented Generation (RAG)"
+   "AI-powered financial analysis and document retrieval across 20 NSE-listed companies"
 )
 
 st.markdown("---")
@@ -20,53 +20,18 @@ st.markdown("---")
 # --------------------------------------------------
 # Layout
 # --------------------------------------------------
-col1, col2 = st.columns([1, 3])
+st.subheader("Query Details")
 
-with col1:
+user_query = st.text_input(
+    "Ask a financial question:",
+    placeholder="Example: what is the revenue operation of infosys?"
+)
 
-    st.subheader("Target Filters")
-
-    company = st.selectbox(
-        "Select Company Context:",
-        [
-            "Infosys",
-            "Reliance",
-            "Titan",
-            "ITC",
-            "Tata Steel",
-            "Adani Power",
-            "Mahindra",
-            "Bajaj Auto",
-            "Wipro",
-            "Cipla",
-            "Asian Paints",
-            "Ambuja Cement",
-            "Sun Pharma",
-            "Torrent Pharma",
-            "Tech Mahindra",
-            "JSW Steel",
-            "TCS",
-            "TVS Motor",
-            "Colgate",
-            "Tata Power",
-        ]
-    )
-
-with col2:
-
-    st.subheader("Query Details")
-
-    user_query = st.text_input(
-        f"Ask a financial question about {company}:",
-        value=f"What is the revenue from operations for {company}?",
-        placeholder="Example: What was the net profit?"
-    )
-
-    execute_button = st.button(
-        "Run Financial Extraction",
-        type="primary",
-        use_container_width=True
-    )
+execute_button = st.button(
+    "Run Financial Analysis",
+    type="primary",
+    use_container_width=True
+)
 
 # --------------------------------------------------
 # Query Backend
@@ -90,21 +55,13 @@ if execute_button:
 
                 result = response.json()
 
-                if not result["company_found"]:
+                # --------------------------------------------------
+                # Retrieved Answer
+                # --------------------------------------------------
 
-                    st.error(
-                        "⚠️ Company could not be identified from the question."
-                    )
+                st.subheader("📊 Retrieved Financial Information")
 
-                else:
-
-                    # --------------------------------------------------
-                    # Retrieved Answer
-                    # --------------------------------------------------
-
-                    st.subheader("📊 Retrieved Financial Information")
-
-                    st.text_area(
+                st.text_area(
                         label="Retrieved Context",
                         value=result["answer"],
                         height=350
@@ -114,17 +71,17 @@ if execute_button:
                     # Source Documents
                     # --------------------------------------------------
 
-                    st.markdown("---")
-                    st.subheader("📚 Source Documents")
+                st.markdown("---")
+                st.subheader("📚 Source Documents")
 
-                    if result["sources"]:
+                if result["sources"]:
 
-                        for i, source in enumerate(result["sources"], start=1):
+                    for i, source in enumerate(result["sources"], start=1):
 
-                            with st.expander(
-                                f"📄 Source {i} • {source.get('source', 'Unknown')}",
-                                expanded=False
-                            ):
+                        with st.expander(
+                            f"📄 Source {i} • {source.get('source', 'Unknown')}",
+                              expanded=False
+                        ):
 
                                 st.write(
                                     f"**Company:** {source.get('company', 'Unknown')}"

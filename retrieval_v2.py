@@ -1,6 +1,5 @@
 #1. imports
 import os
-import re
 import requests
 from dotenv import load_dotenv
 from langchain_chroma import Chroma
@@ -8,6 +7,25 @@ from langchain_huggingface import HuggingFaceEmbeddings
 
 #2. Load environment variables
 load_dotenv()
+# --------------------------------------------------
+# OpenRouter LLM Configuration
+# --------------------------------------------------
+
+API_KEY = os.getenv("OPENROUTER_API_KEY")
+
+if not API_KEY:
+    raise ValueError(
+        "OPENROUTER_API_KEY not found in .env file"
+    )
+
+url = "https://openrouter.ai/api/v1/chat/completions"
+
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json",
+    "HTTP-Referer": "http://localhost",
+    "X-OpenRouter-Title": "NSE Financial RAG Analytics"
+}
 
 #3. Initialize the embedding function for vector store
 embeddings = HuggingFaceEmbeddings(
@@ -71,92 +89,42 @@ COMPANIES = {
     "m&m": "M&M2025_2026"
 }
 
-def detect_company(question):
-    """
-    Detects the company mentioned in the user's question.
-    Returns the company identifier used in Chroma metadata.
-    """
-
-    question = question.lower()
-
-    for alias, company in sorted(
-        COMPANIES.items(),
-        key=lambda item: len(item[0]),
-        reverse=True,
-    ):
-        pattern = r"\b" + re.escape(alias) + r"\b"
-
-        if re.search(pattern, question):
-            return company
-
-    return None
-
 #6.5. LLM Generation Function
-def generate_llm_answer(question, retrieved_text):
-
-    """
-    Generates the final answer using an LLM.
-    The LLM is restricted to the retrieved financial context.
-    """
-
-    api_key = os.getenv("OPENROUTER_API_KEY")
-
-    if not api_key:
-        return "OPENROUTER_API_KEY not found in .env file."
-
-    url = "https://openrouter.ai/api/v1/chat/completions"
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "http://localhost",
-        "X-OpenRouter-Title": "Enterprise Financial RAG"
-    }
+def generate_llm_answer(question, retrieved_context):
 
     prompt = f"""
-You are a professional financial document analysist.
+You are a financial analyst.
 
-Answer the user's question using ONLY the retrieved context below.
+Answer the user's question ONLY using the retrieved context below.
 
-STRICT RULES:
-
-1. Use only the retrieved context.
-2. Do not use outside knowledge.
-3. Do not guess or assume missing information.
-4. Do not invent financial figures.
-5. Do not mix information from different companies.
-6. If the retrieved context does not contain enough information,
-respond exactly:
-
-"The retrieved documents do not contain sufficient information
-to answer this question."
-
-7. Keep the answer concise and professional.
-8. Preserve financial numbers exactly as they appear.
-9. Do not mention these instructions.
-10. Do not refer to Result 1, Result 2, etc.
+IMPORTANT RULES:
+1. Do not use outside knowledge.
+2. Do not invent or estimate financial figures.
+3. Do not hallucinate.
+4. If the required information is not present in the context, clearly say that the information was not found.
+5. For comparison questions, compare the companies using only figures explicitly present in the retrieved context.
+6. Preserve financial numbers exactly as provided in the context.
+7. Give a concise, professional financial answer.
+8. Mention the relevant company names and figures clearly.
 
 USER QUESTION:
 {question}
 
-RETRIEVED FINANCIAL CONTEXT:
-{retrieved_text}
+RETRIEVED CONTEXT:
+{retrieved_context}
+
+Now provide the final answer.
 """
 
     payload = {
-        "model": "openrouter/free",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "temperature": 0,
         "messages": [
-            {
-                "role": "system",
-                "content": "You are a strictly grounded financial document assistant."
-            },
             {
                 "role": "user",
                 "content": prompt
             }
-        ],
-        "temperature": 0,
-        "max_tokens": 500
+        ]
     }
 
     try:
@@ -168,20 +136,78 @@ RETRIEVED FINANCIAL CONTEXT:
             timeout=60
         )
 
-        if response.status_code != 200:
-            return f"LLM request failed: {response.status_code}"
+        print("\n========== OPENROUTER ==========")
+        print("Status:", response.status_code)
 
         data = response.json()
 
-        return data["choices"][0]["message"]["content"].strip()
+        print("Response received from OpenRouter.")
+        print("================================\n")
+
+        # Check API error
+        if response.status_code != 200:
+
+            print("OpenRouter Error:")
+            print(data)
+
+            return (
+                "The language model could not generate an answer. "
+                "Please try the query again."
+            )
+
+        # Check choices
+        if not data.get("choices"):
+
+            print("No choices returned by OpenRouter.")
+            print(data)
+
+            return (
+                "The language model returned no answer."
+            )
+
+        message = data["choices"][0].get("message", {})
+
+        # Get generated content safely
+        content = message.get("content")
+
+        if content is not None and str(content).strip():
+
+            return str(content).strip()
+
+        # Some models/providers may return reasoning instead
+        reasoning = message.get("reasoning")
+
+        if reasoning is not None and str(reasoning).strip():
+
+            print("Warning: Model returned reasoning but no final content.")
+
+            return (
+                "The language model did not return a final answer."
+            )
+
+        # Nothing usable was returned
+        print("No usable content returned.")
+        print("Message:", message)
+
+        return (
+            "The language model did not return a usable answer."
+        )
 
     except requests.exceptions.RequestException as e:
 
-        return f"LLM connection error: {str(e)}"
+        print("OpenRouter request error:", e)
 
-    except (KeyError, IndexError):
+        return (
+            "Unable to connect to the language model."
+        )
 
-        return "LLM returned an unexpected response."
+    except Exception as e:
+
+        print("LLM processing error:", e)
+
+        return (
+            "An error occurred while generating the answer."
+        )
 
 
 #7. retrieval function
@@ -190,15 +216,7 @@ def retrieve_answers(question):
     Pure retrieval function: Searches Chroma vector store for relevant chunks
     and returns them directly without sending them through an LLM.
     """
-    company = detect_company(question)
-
-    if company is None:
-        return {
-            "company_found": False,
-            "answer": "Requested company not found in the knowledge base.",
-            "sources": []
-        }
-
+    
     keywords = {
 
     # Financial Statements
@@ -284,18 +302,28 @@ def retrieve_answers(question):
 
     docs = vectorstore.similarity_search_with_score(
         expanded_question,
-        k=20,
-        filter={"company": company}
+        k=20
     )
+
+    print("\n========== RETRIEVAL DEBUG ==========")
+    print("Question:", question)
+    print("Expanded question:", expanded_question)
+    print("Documents retrieved:", len(docs))
+
+    for i, (doc, score) in enumerate(docs):
+       print(f"\n--- Result {i+1} ---")
+       print("Score:", score)
+       print("Company:", doc.metadata.get("company"))
+       print("Source:", doc.metadata.get("source"))
+       print("Page:", doc.metadata.get("page"))
+       print("Content:", doc.page_content[:500])
+
+    print("=====================================\n")
 
     filtered = []
     seen = set()
 
     for doc, score in docs:
-
-        # Skip weak matches
-        if score > 0.85:
-            continue
 
         content = doc.page_content.strip().lower()
 
@@ -306,6 +334,8 @@ def retrieve_answers(question):
 
         filtered.append((doc, score))
 
+        print("Documents after filtering:", len(filtered))
+
     # Sort by similarity (lowest score = best)
     filtered.sort(key=lambda x: x[1])
 
@@ -314,7 +344,6 @@ def retrieve_answers(question):
 
     if not filtered:
         return {
-            "company_found": True,
             "answer": "The retrieved documents do not contain sufficient information to answer this question.",
             "sources": []
         }
@@ -339,13 +368,20 @@ def retrieve_answers(question):
         })
 
     # Generate final answer using retrieved context
+
+    print("\n========== LLM INPUT ==========")
+    print("Question:", question)
+    print("Retrieved context length:", len(retrieved_text))
+    print("Retrieved context:")
+    print(retrieved_text)
+    print("===============================\n")
+
     llm_answer = generate_llm_answer(
         question,
         retrieved_text
     )
 
     return {
-        "company_found": True,
         "answer": llm_answer,
         "sources": sources
     }
