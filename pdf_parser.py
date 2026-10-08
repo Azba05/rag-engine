@@ -5,7 +5,7 @@ import fitz
 INPUT_FOLDER = "data/reports"
 OUTPUT_FILE = "data/chunks.json"
 
-
+#chunking 250/50
 def chunk_text(text, chunk_size=250, overlap=50):
     words = text.split()
 

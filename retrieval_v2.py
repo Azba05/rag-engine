@@ -144,7 +144,7 @@ Now provide the final answer.
         print("Response received from OpenRouter.")
         print("================================\n")
 
-        # Check API error
+        # Check if any API error
         if response.status_code != 200:
 
             print("OpenRouter Error:")
@@ -155,7 +155,7 @@ Now provide the final answer.
                 "Please try the query again."
             )
 
-        # Check choices
+        # Check choices for model
         if not data.get("choices"):
 
             print("No choices returned by OpenRouter.")
@@ -367,7 +367,7 @@ def retrieve_answers(question):
             "score": round(score, 4)
         })
 
-    # Generate final answer using retrieved context
+    # Generate final answer using retrieved context (for debug)
 
     print("\n========== LLM INPUT ==========")
     print("Question:", question)
